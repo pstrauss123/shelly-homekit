@@ -1,17 +1,11 @@
 name: PR 1737 - Shelly Plus 2PM only
-
-
 on:
   workflow_dispatch:
-
-
 permissions:
   contents: read
-
-
 jobs:
   build:
-    name: Build ShellyPlus2PM from PR 1737
+    name: Build ShellyPlus2PM 2.16.1 with PR 1737
     runs-on: ubuntu-latest
     timeout-minutes: 45
     container:
@@ -19,56 +13,60 @@ jobs:
       volumes:
         - /home/runner/work:/home/runner/work
     steps:
-      - name: Checkout exact PR source
+      - name: Checkout exact 2.16.1 base
         uses: actions/checkout@v4
         with:
           repository: mongoose-os-apps/shelly-homekit
-          ref: b191b967942f09726a5cca1c32e212ae8b58e0ed
+          ref: 8dbd9447497e642620d32dd08e3a2c1d8e729ed6
           fetch-depth: 0
           persist-credentials: false
-
-
-      - name: Verify source and build only ShellyPlus2PM
+      - name: Apply pinned PR changes to 2.16.1
         shell: bash
         run: |
           set -euo pipefail
           cd /home/runner/work/shelly-homekit/shelly-homekit
-          git config --global --add safe.directory /home/runner/work/shelly-homekit/shelly-homekit
-          test "$(git rev-parse HEAD)" = b191b967942f09726a5cca1c32e212ae8b58e0ed
+          git config --global --add safe.directory "$PWD"
+          test "$(git rev-parse HEAD)" = 8dbd9447497e642620d32dd08e3a2c1d8e729ed6
+          git fetch --no-tags origin b191b967942f09726a5cca1c32e212ae8b58e0ed
+          test "$(git rev-parse FETCH_HEAD)" = b191b967942f09726a5cca1c32e212ae8b58e0ed
+          git diff b191b967942f09726a5cca1c32e212ae8b58e0ed~3 b191b967942f09726a5cca1c32e212ae8b58e0ed > /tmp/pr1737.patch
+          git apply --check /tmp/pr1737.patch
+          git apply --index /tmp/pr1737.patch
+          sed -i 's/^version: 2.16.1$/version: 2.16.1-pr1737/' mos.yml
+          grep -qx 'version: 2.16.1-pr1737' mos.yml
+          mkdir -p deliverables
+          git diff --binary HEAD > deliverables/applied-changes.patch
+          git rev-parse HEAD > deliverables/source-base.txt
+          printf '%s\n' b191b967942f09726a5cca1c32e212ae8b58e0ed > deliverables/pr-head.txt
+      - name: Build only ShellyPlus2PM
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd /home/runner/work/shelly-homekit/shelly-homekit
           make ShellyPlus2PM LOCAL=1 CLEAN=1
           test -s build_ShellyPlus2PM/fw.zip
-
-
       - name: Package firmware and provenance for inspection
         shell: bash
         run: |
           set -euo pipefail
           cd /home/runner/work/shelly-homekit/shelly-homekit
-          mkdir -p deliverables
-          cp build_ShellyPlus2PM/fw.zip deliverables/shelly-homekit-ShellyPlus2PM-PR1737-b191b967.zip
-          git rev-parse HEAD > deliverables/source-commit.txt
+          cp build_ShellyPlus2PM/fw.zip deliverables/shelly-homekit-ShellyPlus2PM-2.16.1-pr1737.zip
           cp mos.yml deliverables/source-mos.yml
           cp build_ShellyPlus2PM/gen/build_info.json deliverables/build_info.json
           cp build_ShellyPlus2PM/gen/mgos_deps_manifest.yml deliverables/mgos_deps_manifest.yml
-          printf '%s\n' 'Source: PR #1737, exact head b191b967942f09726a5cca1c32e212ae8b58e0ed' 'Target: ShellyPlus2PM / esp32 / Plus2PM' 'PR version: 2.14.3. Device currently runs 2.16.1; downgrade compatibility is NOT verified.' 'Do not flash until firmware ZIP, manifest, checksums and target compatibility have been verified.' > deliverables/READ-BEFORE-FLASH.txt
-          (cd deliverables && sha256sum shelly-homekit-ShellyPlus2PM-PR1737-b191b967.zip > SHA256SUMS.txt)
-
-
+          (cd deliverables && sha256sum shelly-homekit-ShellyPlus2PM-2.16.1-pr1737.zip > SHA256SUMS.txt)
       - name: Upload only Plus 2PM firmware and provenance
         uses: actions/upload-artifact@v4
         with:
-          name: ShellyPlus2PM-PR1737-b191b967-unverified
+          name: ShellyPlus2PM-2.16.1-pr1737
           path: deliverables/
           if-no-files-found: error
           retention-days: 14
-
-
       - name: Upload build log
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ShellyPlus2PM-PR1737-build-log
+          name: ShellyPlus2PM-2.16.1-pr1737-build-log
           path: build_ShellyPlus2PM/build.log
           if-no-files-found: ignore
           retention-days: 14
-
